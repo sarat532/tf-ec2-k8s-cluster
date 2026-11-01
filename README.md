@@ -197,8 +197,16 @@ unhandled command failure stops the script. Check the EC2 system log or
    `kubelet` and `kubeadm`.
 5. **Join the cluster:** Polls the master's private IP for the join command,
    waiting up to 30 minutes for the endpoint to become available. It validates
-   the response before passing its values to `kubeadm join`; it does not
-   evaluate the response as shell code.
+   the response before passing its values to `kubeadm join`.
+
+   The `read` command splits the received text into fields such as the command
+   name, API-server address, token, and CA certificate hash. The following
+   `if` block checks that it is the expected `kubeadm join` command, that the
+   endpoint matches this cluster's master private IP, and that the token and
+   hash have the expected formats; it also rejects extra fields. This prevents
+   the worker from blindly executing arbitrary text received over HTTP. After
+   validation, the script passes the fields as arguments to `kubeadm join`
+   rather than evaluating the response as shell code.
 
 ## 7. Deploy and verify
 
