@@ -145,6 +145,10 @@ passes `k8s_version`, the master private IP, and each worker's index to the
 worker script. The private IP lets each worker contact the master over the
 VPC.
 
+The root `outputs.tf` exposes the master's public IP, the worker public IPs,
+and an SSH command for the master. Terraform displays these after applying;
+you can also retrieve them later with `terraform output`.
+
 ## 6. Master and worker bootstrap scripts
 
 Terraform supplies these scripts as EC2 user-data. User-data runs during
@@ -221,11 +225,20 @@ terraform apply
 
 Review the plan before confirming `terraform apply`. Instance initialization
 continues after Terraform reports that EC2 instances have been created; allow
-time for the user-data scripts to finish. SSH to the control-plane using the
-private key and its public IP:
+time for the user-data scripts to finish. Terraform prints the IP outputs and
+SSH command after apply. Retrieve them later with:
 
 ```sh
-ssh -i ec2-k8s ec2-user@<control-plane-public-ip>
+terraform output master_public_ip
+terraform output worker_public_ips
+terraform output -raw master_ssh_command
+```
+
+Copy and run the command printed by `terraform output -raw
+master_ssh_command` to connect to the control-plane. Once connected, verify
+the cluster with:
+
+```sh
 kubectl get nodes -o wide
 ```
 
