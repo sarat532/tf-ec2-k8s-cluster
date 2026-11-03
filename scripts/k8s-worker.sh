@@ -25,8 +25,20 @@ echo "Updating system and installing necessary packages..."
 dnf update -y
 dnf install -y git wget vim
 
+# Load modules required by Kubernetes
+echo "Loading required kernel modules..."
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+modprobe overlay
+modprobe br_netfilter
+
 # sysctl params required by setup, params persist across reboots
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward = 1
 EOF
 
@@ -36,6 +48,13 @@ sysctl --system
 # Install containerd
 echo "Installing containerd..."
 dnf install -y containerd
+
+mkdir -p /etc/containerd
+containerd config default | tee /etc/containerd/config.toml
+
+sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+systemctl daemon-reload
 systemctl enable --now containerd
 
 # Set SELinux in permissive mode (effectively disabling it)
