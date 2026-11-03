@@ -87,8 +87,19 @@ systemctl enable --now kubelet
 echo "Initializing Kubernetes master node..."
 kubeadm init --pod-network-cidr=172.16.0.0/16
 
+# Configure kubectl immediately after initializing the control plane.
+export KUBECONFIG=/etc/kubernetes/admin.conf
+mkdir -p /root/.kube
+cp /etc/kubernetes/admin.conf /root/.kube/config
+chmod 600 /root/.kube/config
+
+mkdir -p /home/ec2-user/.kube
+cp /etc/kubernetes/admin.conf /home/ec2-user/.kube/config
+chown ec2-user:ec2-user /home/ec2-user/.kube/config
+chmod 600 /home/ec2-user/.kube/config
+
 # Create a short-lived join command and expose it only to workers through the
-# security-group-restricted endpoint on port 8080.
+# security-group-restricted endpoint on port 25000.
 JOIN_COMMAND=$(kubeadm token create --ttl 30m --print-join-command)
 umask 077
 printf '%s\n' "$JOIN_COMMAND" > /tmp/k8s-join-command.sh
@@ -124,7 +135,7 @@ class JoinCommandHandler(BaseHTTPRequestHandler):
         pass
 
 
-server = HTTPServer(("0.0.0.0", 8080), JoinCommandHandler)
+server = HTTPServer(("0.0.0.0", 25000), JoinCommandHandler)
 server.timeout = 1
 deadline = time.monotonic() + 1800
 try:
@@ -139,7 +150,7 @@ nohup python3 /tmp/k8s-join-command-server.py >/var/log/k8s-join-command-server.
 JOIN_SERVER_PID=$!
 JOIN_SERVER_READY=0
 for attempt in $(seq 1 30); do
-  if curl --fail --silent http://127.0.0.1:8080/join-command --output /dev/null; then
+  if curl --fail --silent http://127.0.0.1:25000/join-command --output /dev/null; then
     JOIN_SERVER_READY=1
     break
   fi
@@ -153,16 +164,6 @@ if [ "$JOIN_SERVER_READY" -ne 1 ]; then
   echo "Join-command endpoint did not become ready." >&2
   exit 1
 fi
-
-# Set up kubeconfig for the root user
-mkdir -p $HOME/.kube
-cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-chown $(id -u):$(id -g) $HOME/.kube/config
-
-# Set up kubeconfig for the ec2-user
-mkdir -p /home/ec2-user/.kube
-cp -i /etc/kubernetes/admin.conf /home/ec2-user/.kube/config
-chown ec2-user:ec2-user /home/ec2-user/.kube/config
 
 # Install a pod network add-on (Calico)
 echo "Installing Calico network add-on..."

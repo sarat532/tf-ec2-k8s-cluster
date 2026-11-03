@@ -85,7 +85,7 @@ systemctl enable --now kubelet
 
 # Poll the master's private, worker-restricted endpoint until its join command is ready.
 MASTER_PRIVATE_IP="${master_private_ip}"
-JOIN_URL="http://$MASTER_PRIVATE_IP:8080/join-command"
+JOIN_URL="http://$MASTER_PRIVATE_IP:25000/join-command"
 JOIN_COMMAND=""
 SECONDS=0
 while [ "$SECONDS" -lt 1800 ]; do

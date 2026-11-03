@@ -182,8 +182,8 @@ resource "aws_security_group" "ec2-k8s-worker" {
 resource "aws_vpc_security_group_ingress_rule" "master_join_command_from_workers" {
   security_group_id            = aws_security_group.ec2-k8s-master.id
   referenced_security_group_id = aws_security_group.ec2-k8s-worker.id
-  from_port                    = 8080
-  to_port                      = 8080
+  from_port                    = 25000
+  to_port                      = 25000
   ip_protocol                  = "tcp"
   description                  = "Temporary Kubernetes join command endpoint from workers"
 }

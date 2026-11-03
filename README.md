@@ -106,13 +106,13 @@ turned into security-group rules:
 | Worker | TCP and UDP 30000-32767 | Kubernetes NodePort services |
 | Worker | TCP 10256 | kube-proxy |
 | Worker | TCP 22 | SSH |
-| Control-plane | TCP 8080 from the worker security group | Temporary join-command endpoint |
+| Control-plane | TCP 25000 from the worker security group | Temporary join-command endpoint |
 
 The current general ingress rules use `0.0.0.0/0`, and the instances receive
 public IP addresses. This exposes sensitive Kubernetes and SSH ports publicly.
 Before applying this configuration, restrict SSH to your trusted IP range and
 restrict Kubernetes control-plane and node ports to the required cluster
-networks or security groups. Port 8080 is separately restricted to instances
+networks or security groups. Port 25000 is separately restricted to instances
 in the worker security group. Both security groups currently allow all
 outbound traffic.
 
@@ -172,17 +172,19 @@ unhandled command failure stops the script. Check the EC2 system log or
    repository using `k8s_version`, installs `kubelet`, `kubeadm`, and
    `kubectl`, then enables kubelet.
 7. **Initialize the control plane:** Runs `kubeadm init` with the pod CIDR
-   `172.16.0.0/16`.
+   `172.16.0.0/16`, then configures `/root/.kube/config` and
+   `/home/ec2-user/.kube/config` from `/etc/kubernetes/admin.conf`. The
+   bootstrap uses that admin config explicitly, independent of the `HOME`
+   environment variable.
 8. **Expose the worker join command:** Creates a kubeadm bootstrap token with
    a 30-minute TTL and writes the generated join command to
    `/tmp/k8s-join-command.sh`. A small Python HTTP server temporarily serves
-   it at `/join-command` on port 8080. The security group permits this port
+   it at `/join-command` on port 25000. The security group permits this port
    only from the worker security group. The server stops after 30 minutes and
    removes the temporary command file. The join token is sensitive; do not
    expose this endpoint to untrusted networks.
-9. **Configure kubectl and install Calico:** Copies the admin kubeconfig for
-   root and `ec2-user`, then applies Calico manifests and configures the pod
-   network CIDR to `172.16.0.0/16`.
+9. **Install Calico:** Applies Calico manifests and configures the pod network
+   CIDR to `172.16.0.0/16`.
 10. **Label worker roles:** Waits for each expected worker node to register,
     then applies the `node-role.kubernetes.io/worker` label. The `control-plane`
     role is assigned to the control-plane node by kubeadm.
@@ -246,6 +248,16 @@ Wait until all nodes are `Ready`; the `ROLES` column should show `control-plane`
 for the master and `worker` for worker nodes. If a node does not join, check
 the user-data logs on that instance and confirm the join endpoint is reachable
 from the worker.
+
+If `kubectl` reports that the API server cannot find a requested resource,
+check that it is using the admin kubeconfig rather than its default
+`http://localhost:8080` endpoint:
+
+```sh
+sudo env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes
+ls -l /root/.kube/config /home/ec2-user/.kube/config
+sudo tail -n 100 /var/log/cloud-init-output.log
+```
 
 To remove the resources created by this configuration when finished:
 
